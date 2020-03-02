@@ -1,47 +1,35 @@
 import re
 import operator as op
+import ephem
+import inspect
 
 
 class GenericCommand:
 
     def __init__(self, *args, **kwargs):
         self.input_error = ""
-    
+
     def run(self, user_input):
         self.check_errors(user_input)
         if self.input_error:
             return self.input_error
         return self.main(self.parse_command_args(user_input))
-    
+
     def check_errors(self, user_input):
         pass
 
     def parse_command_args(self, user_input):
         return user_input
-    
+
     def main(self, command_args):
         return ""
 
+
 class CalcCommand(GenericCommand):
-    """
-    def refine_user_input(self, user_input):
-        self.refined_input = user_input.replace(" ", "")
-    
-    def check_raw_input(self, user_input):
-        operator_pattern = "[\+\-\*\/]"
-        operator_without_operands = f"^{operator_pattern}|{operator_pattern}$|{operator_pattern}{operator_pattern}"
-        if not expression_string:
-            return "Выражение не задано"
-        if not re.match(operator_pattern, expression_string):
-            return "Нет ни одного арифметического оператора"
-        if re.match(operator_without_operands, expression_string):
-            return "Оператор без операндов"
-        return ""
-    """
 
     def check_errors(self, user_input):
         refined_string = user_input.replace(" ", "")
-        operator_pattern = "[\+\-\*\/]"
+        operator_pattern = r"[\+\-\*\/]"
         operator_without_operands = f"^{operator_pattern}|{operator_pattern}$|{operator_pattern}{operator_pattern}"
         if not refined_string:
             self.input_error = "Выражение не задано"
@@ -51,8 +39,8 @@ class CalcCommand(GenericCommand):
             self.input_error = "Оператор без операндов"
 
     def parse_command_args(self, user_input):
-        return re.findall("\d+|[\+\-\*\/]", user_input)
-    
+        return re.findall(r"\d+|[\+\-\*\/]", user_input)
+
     def evaluate(self, tokenized_expression):
         values = []
         operators = []
@@ -69,7 +57,7 @@ class CalcCommand(GenericCommand):
         def to_digit(token):
             try:
                 return int(token)
-            except:
+            except Exception:
                 return float(token)
 
         def evaluate_last():
@@ -100,7 +88,7 @@ class CalcCommand(GenericCommand):
             evaluate_last()
 
         return f"Получилось {values[0]}"
-    
+
     def main(self, command_args):
         try:
             return self.evaluate(command_args)
@@ -114,23 +102,23 @@ class CityGameCommand(GenericCommand):
         super().__init__(*args, **kwargs)
         self.bot_cities = kwargs["cities"]
         self.used_cities = set()
-        # ToDo время на час от текущего
-        self.expiration_time = None
         self.bot_last_city = ""
-    
+        self.game_over = False
+
     def check_errors(self, user_input):
-        if re.search("[a-zA-Z\d]", user_input):
+        if re.search(r"[a-zA-Z\d]", user_input):
             self.input_error = "Латиницу и цифры использовать нельзя"
         elif self.bot_last_city:
             last_letter = self.bot_last_city[-1].capitalize()
             if not user_input.startswith(last_letter):
                 self.input_error = f"Новый город должен начинаться на букву {last_letter}"
-    
+
     def main(self, command_args):
         return self.play(command_args)
-    
+
     def play(self, city_from_user):
         if city_from_user in self.used_cities:
+            self.game_over = True
             return "Такой город уже был! Ты проиграл!"
         self.used_cities.add(city_from_user)
         if city_from_user in self.bot_cities:
@@ -138,10 +126,23 @@ class CityGameCommand(GenericCommand):
         letter = city_from_user[-1].capitalize()
         available_cities = [city for city in self.bot_cities if city.startswith(letter)]
         if not available_cities:
+            self.game_over = True
             return f"Я не знаю городов на букву {letter}, ты победил!"
         next_city = available_cities[0]
         self.bot_last_city = next_city
         self.used_cities.add(next_city)
         self.bot_cities.remove(next_city)
         return next_city
-   
+
+
+class PlanetCommand(GenericCommand):
+
+    def main(self, command_args):
+        try:
+            planet_class = getattr(ephem, command_args)
+            if inspect.isclass(planet_class) and issubclass(planet_class, ephem.Planet):
+                planet = planet_class()
+                planet.compute()
+                return ephem.constellation(planet)[1]
+        finally:
+            return "Неизвестная планета"
