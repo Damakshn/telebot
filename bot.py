@@ -1,6 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import json
 import logging
+from collections import defaultdict
 from commands import CalcCommand, CityGameCommand, PlanetCommand
 
 
@@ -11,9 +12,10 @@ logging.basicConfig(
 )
 
 with open("cities_list.txt", "r", encoding="utf-8") as f:
-    CITIES_OF_RUSSIA = set(f.read().split())
+    CITIES_OF_RUSSIA = set([line.rstrip("\n") for line in f])
 
-user_sessions = {}
+user_sessions = defaultdict(lambda : CityGameCommand(cities=CITIES_OF_RUSSIA))
+commands = {}
 
 
 def greet_user(bot, update):
@@ -36,7 +38,7 @@ def talk_to_me(bot, update):
 def calc_command(bot, update):
     expression = update.message.text[update.message.text.find(" ") + 1:]
     logging.info("Вызвана команда /calc, выражение - %s", expression)
-    cmd = CalcCommand()
+    cmd = commands["calc"]
     answer = cmd.run(expression)
     update.message.reply_text(answer)
 
@@ -45,7 +47,7 @@ def city_command(bot, update):
     city = update.message.text[update.message.text.find(" ") + 1:]
     logging.info("Вызвана команда /city, город - %s", city)
     user_id = update.message.from_user["id"]
-    cmd = user_sessions.setdefault(user_id, CityGameCommand(cities=CITIES_OF_RUSSIA))
+    cmd = user_sessions[user_id]
     # если уже была игра и она закончилась, то обновляем список городов
     if cmd.game_over:
         cmd = CityGameCommand(cities=CITIES_OF_RUSSIA)
@@ -57,7 +59,7 @@ def city_command(bot, update):
 def planet_command(bot, update):
     planet_name = update.message.text.split()[1]
     logging.info("Вызвана команда /planet, планета - %s", planet_name)
-    cmd = PlanetCommand()
+    cmd = commands["planet"]
     answer = cmd.run(planet_name)
     update.message.reply_text(answer)
 
@@ -69,6 +71,9 @@ def main():
     proxy_settings = settings["PROXY"]
     logging.info("Бот запускается")
     bot = Updater(key, request_kwargs=proxy_settings)
+
+    commands["planet"] = PlanetCommand()
+    commands["calc"] = CalcCommand()
 
     dp = bot.dispatcher
     dp.add_handler(CommandHandler("start", greet_user))
